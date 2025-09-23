@@ -37,7 +37,7 @@ def trainer(args, epoch, main_net, adjust_learning_rate, optimizer, trainloader,
         label_rgb = label_rgb.cuda()
         label_ir = label_ir.cuda()
         input_rgb = input_rgb.cuda()
-        input_ir = input_ir.cuda()
+        input_ir = input_ir.cuda() 
 
         feat, output_cls, output_dis = main_net(input_rgb, input_ir, modal=0, train_set=True)
 
@@ -214,12 +214,3 @@ def compute_euclidean_distance(query_feat, gall_feat):
     distmat = np.sqrt(query_sq + gall_sq.T - 2 * dot_product)
     
     return distmat
-
-
-# 或者使用更简洁的scipy版本（如果需要的话）
-def compute_euclidean_distance_scipy(query_feat, gall_feat):
-    """
-    使用scipy的cdist计算欧式距离（需要安装scipy）
-    """
-    from scipy.spatial.distance import cdist
-    return cdist(query_feat, gall_feat, metric='euclidean')

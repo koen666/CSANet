@@ -19,6 +19,15 @@ def load_data(input_data_path ):
     return file_image, file_label
 
 
+# color_pos = [[0, 2], [1, 4], [3, 5]]   
+# # 解释：ID=0 的 RGB 图片在索引 0 和 2
+# #       ID=1 的 RGB 图片在索引 1 和 4
+# #       ID=2 的 RGB 图片在索引 3 和 5
+
+# thermal_pos = [[0, 1], [2, 5], [3, 4]] 
+# # 解释：ID=0 的 IR 图片在索引 0 和 1
+# #       ID=1 的 IR 图片在索引 2 和 5
+# #       ID=2 的 IR 图片在索引 3 和 4
 def GenIdx(train_color_label, train_thermal_label):
     color_pos = []
     unique_label_color = np.unique(train_color_label)
@@ -35,6 +44,9 @@ def GenIdx(train_color_label, train_thermal_label):
     return color_pos, thermal_pos
 
 
+# pos = [[0, 2], [1, 4], [3, 5]]  # 每个 ID 的索引
+# num = [2, 2, 2]                  # 每个 ID 的数量
+# prob = [2/6, 2/6, 2/6]           # 每个 ID 的比例
 def GenIdx_single(label):
     pos = []
     num = []
@@ -50,7 +62,14 @@ def GenIdx_single(label):
 
     return pos, np.array(num) / np.array(num).sum()
 
-    
+# # 假设有 3 个行人，每个行人可能在 2 个摄像头下有图片
+# sample_pos = [
+#     [0, 3],    # 行人 0，摄像头 1
+#     [1],       # 行人 0，摄像头 2
+#     [2, 4],    # 行人 1，摄像头 1
+#     [5],       # 行人 1，摄像头 2
+#     ...
+# ]
 def GenCamIdx(gall_img, gall_label, mode):
     if mode =='indoor':
         camIdx = [1,2]
@@ -70,7 +89,7 @@ def GenCamIdx(gall_img, gall_label, mode):
 
     return sample_pos
 
-
+# 任务中生成训练数据批次。它的核心功能是为 RGB（可见光）和 IR（红外）两种模态的数据生成对应的样本索引，确保同一身份的样本被组合在一起进行训练
 class IdentitySampler(Sampler):
     """
     Note: color = rgb = visible, thermal = ir = infrared.

@@ -2,6 +2,13 @@ import os
 import numpy as np
 import random
 
+# query_img, query_id, query_cam = process_query_sysu("/SYSU-MM01", mode="all")
+# print(query_img[:3])
+# # ['/SYSU-MM01/cam3/0001/0001_0001.jpg', '/SYSU-MM01/cam3/0001/0001_0002.jpg', '/SYSU-MM01/cam6/0001/0001_0001.jpg']
+# print(query_id[:3])
+# # [1, 1, 1]
+# print(query_cam[:3])
+# # [3, 3, 6]
 
 def process_query_sysu(data_path, mode="all"):
     if mode == "all":

@@ -1,6 +1,6 @@
 import torch.optim as optim
 
-
+#动态调整学习率
 def adjust_learning_rate(args, optimizer, epoch):
     if epoch < 10:
         lr = args.lr * (epoch + 1) / 10

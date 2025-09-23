@@ -20,6 +20,7 @@ def mask_outlier(pseudo_labels):
     return np.array([i in train_labels for i in pseudo_labels])
 
 
+#得到的是图像和对应标签的集合
 def read_image(data_files, pid2label, img_w, img_h):
     train_img = []
     train_label = []
@@ -39,6 +40,7 @@ def read_image(data_files, pid2label, img_w, img_h):
     return np.array(train_img), np.array(train_label)
 
 
+#得到图像路径和对应标签输出类似/images/cam1/0001_0001.jpg 0，分别得到file_image=/images/cam1/0001_0001.jpg file_label=0
 def load_data(input_data_path):
     with open(input_data_path) as f:
         data_file_list = open(input_data_path, 'rt').read().splitlines()
@@ -56,6 +58,12 @@ def pre_process_sysu(args, data_dir):
     # load id info
     file_path_train = os.path.join(data_dir, "exp/train_id.txt")
     file_path_val = os.path.join(data_dir, "exp/val_id.txt")
+    # 示例：
+    # 文件 train_id.txt 内容：
+    # 1,2,5,10
+    # 处理后：
+    # ids = [1,2,5,10]
+    # id_train = ["0001","0002","0005","0010"]
     with open(file_path_train, 'r') as file:
         ids = file.read().splitlines()
         ids = [int(y) for y in ids[0].split(',')]
@@ -68,7 +76,10 @@ def pre_process_sysu(args, data_dir):
 
     # combine train and val split
     id_train.extend(id_val)
-
+    # 假设 cam1/0001/ 目录下有：
+    # 0001_0001.jpg, 0001_0002.jpg
+    # files_rgb 会增加：
+    # ["cam1/0001/0001_0001.jpg", "cam1/0001/0001_0002.jpg"]
     files_rgb = []
     files_ir = []
     for id in sorted(id_train):
@@ -111,7 +122,7 @@ def pre_process_regdb(args, data_dir):
     train_color_image = []
     for i in range(len(color_img_file)):
         img = Image.open(data_dir + color_img_file[i])
-        img = img.resize((args.img_w, args.img_h), Image.ANTIALIAS)
+        img = img.resize((args.img_w, args.img_h), Image.LANCZOS)
         pix_array = np.array(img)
         train_color_image.append(pix_array)
     train_color_image = np.array(train_color_image)
@@ -120,7 +131,7 @@ def pre_process_regdb(args, data_dir):
     train_thermal_image = []
     for i in range(len(thermal_img_file)):
         img = Image.open(data_dir + thermal_img_file[i])
-        img = img.resize((args.img_w, args.img_h), Image.ANTIALIAS)
+        img = img.resize((args.img_w, args.img_h), Image.LANCZOS)
         pix_array = np.array(img)
         train_thermal_image.append(pix_array)
     train_thermal_image = np.array(train_thermal_image)
@@ -206,7 +217,7 @@ class TestData(data.Dataset):
         test_image = []
         for i in range(len(test_img_file)):
             img = Image.open(test_img_file[i])
-            img = img.resize((img_size[0], img_size[1]), Image.ANTIALIAS)
+            img = img.resize((img_size[0], img_size[1]), Image.LANCZOS)
             pix_array = np.array(img)
             test_image.append(pix_array)
         test_image = np.array(test_image)
