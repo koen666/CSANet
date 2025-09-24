@@ -15,7 +15,7 @@ Dataset sysu Statistics:
   query    |    96 |     3803
   gallery  |    96 |      301
   ----------------------------
-Data loading time:	 552.640
+Data loading time:	 380.564
 Start epoch: 0, end epoch: 81
 ==> Start training...
 ==> Preparing data loader...
