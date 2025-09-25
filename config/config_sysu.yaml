@@ -1,43 +1,72 @@
 ## Note: color = rgb = visible, thermal = ir = infrared.
 
-## dataset parameters
-dataset: sysu                # sysu or regdb
-dataset_path: ./dataset/ # dataset root path
-mode: all                    # all or indoor (sysu test), thermaltovisible or visibletothermal (regdb test)
-workers: 4                   # number of data loading workers (default: 4)
-dataset_num_size: 1          # the multiple of dataset size per trainloader
+## 1. 数据集参数（适配论文SYSU-MM01协议）
+dataset: sysu                # 固定为sysu（当前配置针对SYSU-MM01）
+dataset_path: ./dataset/     # 数据集根路径（保持不变）
+mode: all                    # SYSU测试模式：all（All-Search）或indoor（Indoor-Search）
+workers: 4                   # 数据加载线程数（论文默认，保持不变）
+dataset_num_size: 1          # 数据集倍数（保持不变）
+# 测试模式扩展（论文SYSU双测试模式）
+test_mode:
+  sysu_test_modes: ["all", "indoor"]  # 论文要求验证的两种测试模式
+  query_modal: 2                     # 红外查询模态编号（2=thermal/ir）
+  gall_modal: 1                      # 可见光画廊模态编号（1=visible/rgb）
 
-## model parameters
-arch: resnet50               # network baseline
-pool_dim: 2048               # pooling dim: 2048 for resnet50
-per_add_iters: 1             # number of iters adding to coefficient of GRL for each training batch
-lambda_sk: 25                # hyperparameter for Sinkhorn-Knopp algorithm
+## 2. 模型参数（论文Transformer骨干设定）
+arch: transreid              # 论文指定：双流Transformer（TransReID）
+pool_dim: 768                # TransReID输出维度（论文特征维度，🔶1-132/187）
+per_add_iters: 1             # GRL系数累加步数（ResNet时代冗余参数，可保留但不生效）
+lambda_sk: 2.0               # Sinkhorn-Knopp算法温度系数（论文设定，🔶1-256）
+# 记忆库参数（论文Eq.3动量更新）
+memory:
+  momentum: 0.9               # 记忆库动量更新系数（μ=0.9，🔶1-134）
+  update_freq: 5              # 记忆库更新频率（每5 epoch，🔶1-134）
 
-## optimizer parameters
-optim: adam                  # optimizer: adam
-lr: 0.0035                   # learning rate: 0.0035 for adam
+## 3. 优化器参数（适配Transformer学习率）
+optim: adam                  # 优化器（保持不变，论文默认用Adam）
+lr: 3e-4                     # 基础学习率：Step-I用3e-4，Step-II骨干lr降为3e-5（通过代码动态调整）
+# 学习率调度（新增，论文Step-I升温、Step-II衰减）
+lr_scheduler:
+  step_i_lr: 3e-4            # Step-I骨干学习率
+  step_ii_backbone_lr: 3e-5   # Step-II骨干学习率（Step-I的1/10）
+  step_ii_module_lr: 3e-4     # Step-II模块学习率（TBGM/CAP/IPCC，为骨干的10倍，🔶1-209）
 
-## normal parameters
-file_name: otla-reid/        # log file name
-setting: semi-supervised     # training setting: supervised or semi-supervised or unsupervised
-train_visible_image_path: ./dataset/SYSU-MM01/spcl_uda_market1501TOsysumm01_rgb_train_rgb_resized_img.npy   # the stored visible image path getting from USL-ReID or UDA-ReID methods for unsupervised setting
-train_visible_label_path: ./dataset/SYSU-MM01/spcl_uda_market1501TOsysumm01_rgb_train_rgb_resized_label.npy   # the stored visible label path getting from USL-ReID or UDA-ReID methods for unsupervised setting
-seed: 0                      # random seed
-gpu: 0                       # gpu device ids for CUDA_VISIBLE_DEVICES
-model_path: save_model/      # model save path
-log_path: log/               # log save path
-vis_log_path: vis_log/       # tensorboard log save path
-save_epoch: 10               # save model every few epochs
-img_w: 144                   # image width
-img_h: 288                   # image height
-train_batch_size: 4          # training batch size: 4
-num_pos: 8                   # number of pos per identity for each modality: 8
-test_batch_size: 64          # testing batch size
-start_epoch: 0               # start training epoch
-end_epoch: 81                # end training epoch
-eval_epoch: 1                # testing epochs
+## 4. 通用参数（对齐论文实验设定）
+file_name: csanet_sysu/      # 日志/模型保存根目录（修改为CSANet专属，便于区分）
+setting: unsupervised        # 论文核心场景：无监督（Unsupervised VI-ReID）
+# 无监督场景样本路径（保持不变，适配USL-ReID/UDA-ReID预处理结果）
+train_visible_image_path: ./dataset/SYSU-MM01/spcl_uda_market1501TOsysumm01_rgb_train_rgb_resized_img.npy
+train_visible_label_path: ./dataset/SYSU-MM01/spcl_uda_market1501TOsysumm01_rgb_train_rgb_resized_label.npy
+seed: 42                     # 随机种子（论文要求可复现，原0改为42，避免极端值）
+gpu: 0                       # GPU设备ID（保持不变）
+model_path: save_model/      # 模型保存路径（保持不变）
+log_path: log/               # 日志保存路径（保持不变）
+vis_log_path: vis_log/       # TensorBoard日志路径（保持不变）
+save_epoch: 10               # 模型保存间隔（每10 epoch，保持不变）
+img_w: 144                   # 图像宽度（论文VI-ReID标准尺寸，保持不变）
+img_h: 288                   # 图像高度（论文VI-ReID标准尺寸，保持不变）
+train_batch_size: 4          # 训练batch size（每个batch身份数，保持不变）
+num_pos: 8                   # 每个身份样本数（保持不变）
+test_batch_size: 64          # 测试batch size（保持不变）
+start_epoch: 0               # 起始epoch（保持不变）
+end_epoch: 60                # 总epoch（Step-I 20 + Step-II 40，论文Algorithm 1）
+eval_epoch: 5                # 测试间隔（每5 epoch，原1改为5，减少测试耗时）
 
-## loss parameters
-margin: 0.3                  # triplet loss margin
-lambda_vr: 0.1               # coefficient of prediction alignment loss
-lambda_rv: 0.5               # coefficient of prediction alignment loss
+## 5. 损失参数（CSANet专属，删除冗余，对齐论文Eq.21）
+loss:
+  margin: 0.3                 # TripletLoss margin（Step-I NCE损失用，保持不变）
+  lambda_sk: 2.0              # Sinkhorn-Knopp温度系数（OTLA-SK伪标签优化，保持不变）
+  lambda_cc: 1.0              # 跨模态对比损失（L_CC）权重，论文Eq.21设定λ₁=1.0
+  lambda_ipcc: 0.5            # IPCC一致性损失（L_IPCC）权重，论文Eq.21设定λ₂=0.5
+  tau: 0.05                   # 温度系数（所有对比损失/概率响应共用，🔶1-133/187）
+
+## 6. 课程学习与核心模块参数（CSANet专属，论文Step-II用）
+curriculum:
+  # TBGM课程划分阈值（简单/中等/复杂，🔶1-99）
+  eps_plain: 0.4              # 简单课程相似度阈值
+  eps_moderate: 0.6           # 中等课程相似度阈值
+  eps_intricate: 0.8          # 复杂课程相似度阈值
+  # CAP关联传递参数（🔶1-171）
+  cap_topk: 3                 # CAP关联传递Top-K相似简单聚类
+  # IPCC模块参数（🔶1-187）
+  ipcc_ref_memory: "plain"    # IPCC参考记忆库类型（简单课程记忆库）

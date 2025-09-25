@@ -187,128 +187,53 @@ def pre_process_regdb(args, data_dir):
 
 
 class SYSUData(data.Dataset):
-    def __init__(self, args, data_dir, transform_train=None, is_train=True, for_memory=False):
-        """
-        优化点：
-        1. 双模态（VIS/IR）独立加载、独立存储（🔶1-88）
-        2. 无监督场景下通过DBSCAN生成伪标签（🔶1-131）
-        3. 支持输出单模态完整数据（for_memory=True时，用于Step-I记忆库初始化）（🔶1-132）
-        """
-        self.args = args
-        self.is_train = is_train
-        self.for_memory = for_memory  # 是否为记忆库提供完整数据
-        self.data_dir = data_dir
-        self.rgb_cameras = ["cam1", "cam2", "cam4", "cam5"]  # 论文SYSU-MM01可见光相机（🔶1-204）
-        self.ir_cameras = ["cam3", "cam6"]  # 论文SYSU-MM01红外相机（🔶1-204）
-        
-        # Step1: 加载原始数据（双模态独立加载）
-        self.train_vis_img, self.train_vis_raw_label = self._load_single_modal("vis")  # 可见光原始数据（无标签时为占位符）
-        self.train_ir_img, self.train_ir_raw_label = self._load_single_modal("ir")    # 红外原始数据
-        
-        # Step2: 无监督场景下生成伪标签（论文核心逻辑）
-        if args.setting == "unsupervised":
-            # 注意：CSANet Step-I需先提取单模态特征，再聚类（此处先预留接口，后续结合模型特征提取）
-            # 若需提前生成伪标签，需先加载骨干网络提取特征（示例逻辑如下）
-            if args.pretrain_feat_path is not None:
-                # 加载预提取的单模态特征（用于DBSCAN聚类）
-                vis_feats = np.load(os.path.join(data_dir, args.vis_feat_path))
-                ir_feats = np.load(os.path.join(data_dir, args.ir_feat_path))
-                
-                # 生成可见光伪标签（按论文DBSCAN参数）
-                vis_mask, self.train_vis_label = generate_unsupervised_pseudo_label(vis_feats, "sysu")
-                self.train_vis_img = self.train_vis_img[vis_mask]  # 过滤异常样本
-                
-                # 生成红外伪标签
-                ir_mask, self.train_ir_label = generate_unsupervised_pseudo_label(ir_feats, "sysu")
-                self.train_ir_img = self.train_ir_img[ir_mask]
-        else:
-            # 有监督场景（仅用于对比实验）
-            self.train_vis_label = self.train_vis_raw_label
-            self.train_ir_label = self.train_ir_raw_label
-        
-        # Step3: 加载论文要求的数据增强（ADCA策略）
-        self.transform = get_adca_transform(args.img_w, args.img_h, is_train=is_train)
+    def __init__(self, args, data_dir, transform_train_rgb=None, transform_train_ir=None, colorIndex=None, thermalIndex=None):
+        # 原版逻辑：调用 pre_process_sysu 加载数据（自动处理 exp/train_id.txt）
+        self.train_color_image, self.train_color_label, self.train_thermal_image, self.train_thermal_label = pre_process_sysu(args, data_dir)
 
-    def _load_single_modal(self, modal_type):
-        """
-        按模态加载SYSU-MM01数据（论文数据组织结构：cam/id/img.jpg）（🔶1-204）
-        modal_type: "vis"（可见光）或"ir"（红外）
-        """
-        # 加载训练ID（论文train_id.txt/val_id.txt格式）（🔶1-204）
-        file_path_train = os.path.join(self.data_dir, "exp/train_id.txt")
-        file_path_val = os.path.join(self.data_dir, "exp/val_id.txt")
-        
-        with open(file_path_train, 'r') as f:
-            ids_train = [f"%04d" % int(x) for x in f.read().splitlines()[0].split(',')]
-        with open(file_path_val, 'r') as f:
-            ids_val = [f"%04d" % int(x) for x in f.read().splitlines()[0].split(',')]
-        ids_all = sorted(ids_train + ids_val)  # 合并训练+验证集（论文设定）
-        
-        # 选择对应模态的相机
-        cameras = self.rgb_cameras if modal_type == "vis" else self.ir_cameras
-        img_list = []
-        label_list = []
-        
-        for pid in ids_all:
-            for cam in cameras:
-                img_dir = os.path.join(self.data_dir, cam, pid)
-                if not os.path.isdir(img_dir):
-                    continue
-                # 按论文要求排序图像（确保一致性）
-                imgs = sorted([os.path.join(img_dir, img) for img in os.listdir(img_dir)])
-                img_list.extend(imgs)
-                # 提取PID（论文图像命名格式：xxx_xxxx.jpg，PID为后4位前的数字）（🔶1-204）
-                pids = [int(img_path[-13:-9]) for img_path in imgs]
-                label_list.extend(pids)
-        
-        # 加载图像并转为numpy数组
-        img_array = []
-        for img_path in img_list:
-            img = Image.open(img_path).convert("RGB")  # 统一转为RGB（红外图单通道需扩展为3通道）
-            img = img.resize((self.args.img_w, self.args.img_h), Image.LANCZOS)
-            img_array.append(np.array(img))
-        img_array = np.array(img_array)
-        label_array = np.array(label_list)
-        
-        return img_array, label_array
+        # 原版无监督场景处理（保留，适配 config 中的 unsupervised 设定）
+        if args.setting == "unsupervised":
+            # 若为无监督，加载预生成的 .npy 伪标签文件（原版逻辑）
+            self.train_color_image = np.load(os.path.join(data_dir, args.train_visible_image_path))
+            self.train_color_label = np.load(os.path.join(data_dir, args.train_visible_label_path))
+
+            # 过滤异常伪标签（原版 mask_outlier 函数）
+            mask = mask_outlier(self.train_color_label)
+            self.train_color_image = self.train_color_image[mask]
+            self.train_color_label = self.train_color_label[mask]
+            # 重新映射标签（避免标签不连续）
+            ids_container = list(np.unique(self.train_color_label))
+            id2label = {id_: label for label, id_ in enumerate(ids_container)}
+            for i, label in enumerate(self.train_color_label):
+                self.train_color_label[i] = id2label[label]
+
+        # 原版参数：数据增强、样本索引（colorIndex/thermalIndex 用于采样）
+        self.transform_train_rgb = transform_train_rgb
+        self.transform_train_ir = transform_train_ir
+        self.cIndex = colorIndex  # 可见光样本索引（由采样器生成）
+        self.tIndex = thermalIndex  # 红外样本索引（由采样器生成）
+        self.args = args
 
     def __getitem__(self, index):
-        """
-        输出逻辑：
-        - 训练时：返回双模态样本（VIS+IR），用于跨模态关联学习（🔶1-122）
-        - 记忆库初始化时（for_memory=True）：返回单模态样本+标签，用于构建记忆库（🔶1-132）
-        """
-        if self.for_memory:
-            # 为记忆库提供单模态完整数据（Step-I需分别构建VIS/IR记忆库）
-            if self.args.current_modal == "vis":
-                img = self.train_vis_img[index]
-                label = self.train_vis_label[index]
-            else:
-                img = self.train_ir_img[index]
-                label = self.train_ir_label[index]
-            img = self.transform(img)
-            return img, label
-        else:
-            # 训练时双模态采样（确保batch内有两类模态）
-            # 可见光样本（按索引取）
-            vis_img = self.train_vis_img[index % len(self.train_vis_img)]
-            vis_label = self.train_vis_label[index % len(self.train_vis_img)]
-            # 红外样本（随机取，模拟论文跨模态匹配场景）
-            ir_idx = np.random.randint(len(self.train_ir_img))
-            ir_img = self.train_ir_img[ir_idx]
-            ir_label = self.train_ir_label[ir_idx]
-            
-            # 数据增强
-            vis_img = self.transform(vis_img)
-            ir_img = self.transform(ir_img)
-            
-            return vis_img, ir_img, vis_label, ir_label
+        # 原版逻辑：按索引加载可见光/红外样本（双模态同时返回）
+        # 注意：index 对应采样器生成的索引，cIndex/tIndex 映射到实际数据索引
+        img_vis = self.train_color_image[self.cIndex[index]]
+        label_vis = self.train_color_label[self.cIndex[index]]
+        img_ir = self.train_thermal_image[self.tIndex[index]]
+        label_ir = self.train_thermal_label[self.tIndex[index]]
+
+        # 数据增强（原版按模态区分增强策略）
+        if self.transform_train_rgb is not None:
+            img_vis = self.transform_train_rgb(img_vis)
+        if self.transform_train_ir is not None:
+            img_ir = self.transform_train_ir(img_ir)
+
+        return img_vis, img_ir, label_vis, label_ir  # 双模态输出格式（适配后续训练）
 
     def __len__(self):
-        """无监督训练时按可见光样本数定长（红外样本随机匹配）"""
-        return len(self.train_vis_img) if self.args.setting == "unsupervised" else max(len(self.train_vis_img), len(self.train_ir_img))
-
-
+        # 原版逻辑：长度由可见光样本数决定（双模态采样长度一致）
+        return len(self.train_color_label)
+    
 class RegDBData(data.Dataset):
     def __init__(self, args, data_dir, transform_train=None, is_train=True, for_memory=False):
         """

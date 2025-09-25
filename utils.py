@@ -711,11 +711,10 @@ class CSANetLogger(object):
         if self.file is not None:
             self.file.flush()
             os.fsync(self.file.fileno())
-
+            
     def close(self):
-        self.console.close()
         if self.file is not None:
-            self.file.close()
+            self.file.close()  # 仅关闭日志文件，不关闭控制台stdout
 
     def log_curriculum(self, epoch: int, step: str, stats: dict):
         """记录课程阶段统计信息（锚点数量等）"""
